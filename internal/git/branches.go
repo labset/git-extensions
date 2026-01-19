@@ -195,3 +195,34 @@ func DeleteBranches(branches []string) error {
 	}
 	return nil
 }
+
+func GetRecentBranches() ([]Branch, error) {
+	currentBranch, _ := GetCurrentBranch()
+
+	var branches []Branch
+	err := iexec.WithOutput("git for-each-ref refs/heads/ --sort=-committerdate --format=%(refname:short)", func(output string) error {
+		for _, name := range strings.Split(output, "\n") {
+			if name != "" && name != currentBranch {
+				branches = append(branches, Branch{Name: name})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent branches: %w", err)
+	}
+
+	return branches, nil
+}
+
+func SwitchBranch(branch string) error {
+	cmd := exec.Command("git", "checkout", branch)
+
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to switch to branch %s: %s", branch, stderr.String())
+	}
+	return nil
+}
