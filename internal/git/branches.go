@@ -43,9 +43,13 @@ func GetCurrentBranch() (string, error) {
 }
 
 func GetPurgeableBranches(defaultBranch string) ([]Branch, []string) {
-	currentBranch, _ := GetCurrentBranch()
-
 	var warnings []string
+
+	currentBranch, err := GetCurrentBranch()
+	if err != nil {
+		warnings = append(warnings, fmt.Sprintf("Could not detect current branch: %v", err))
+		return nil, warnings
+	}
 
 	merged, err := getMergedBranches(defaultBranch)
 	if err != nil {
@@ -139,7 +143,10 @@ func isSquashMerged(branch, defaultBranch string) bool {
 	// Check if this tree state is reachable from the default branch
 	// using git cherry - if all commits show "-", they're already in default
 	cherryCmd := exec.Command("git", "cherry", defaultBranch, tempCommitStr)
-	cherryOut, _ := cherryCmd.Output()
+	cherryOut, err := cherryCmd.Output()
+	if err != nil {
+		return false
+	}
 
 	// If output is empty or shows "-", the changes are in default branch
 	output := strings.TrimSpace(string(cherryOut))
