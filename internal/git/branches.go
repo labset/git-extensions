@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	iexec "github.com/labset/git-extensions/internal/exec"
 )
 
 type Branch struct {
@@ -12,20 +14,24 @@ type Branch struct {
 }
 
 func GetDefaultBranch() (string, error) {
+	var result string
+
 	// Try to get the default branch from remote
-	cmd := exec.Command("git", "symbolic-ref", "refs/remotes/origin/HEAD", "--short")
-	out, err := cmd.Output()
-	if err == nil {
-		parts := strings.Split(strings.TrimSpace(string(out)), "/")
+	err := iexec.WithOutput("git symbolic-ref refs/remotes/origin/HEAD --short", func(output string) error {
+		parts := strings.Split(output, "/")
 		if len(parts) > 1 {
-			return parts[len(parts)-1], nil
+			result = parts[len(parts)-1]
 		}
+		return nil
+	})
+	if err == nil && result != "" {
+		return result, nil
 	}
 
 	// Fallback: check if main or master exists
 	for _, branch := range []string{"main", "master"} {
 		cmd := exec.Command("git", "rev-parse", "--verify", branch)
-		if err := cmd.Run(); err == nil {
+		if cmd.Run() == nil {
 			return branch, nil
 		}
 	}
@@ -34,12 +40,15 @@ func GetDefaultBranch() (string, error) {
 }
 
 func GetCurrentBranch() (string, error) {
-	cmd := exec.Command("git", "rev-parse", "--abbrev-ref", "HEAD")
-	out, err := cmd.Output()
+	var result string
+	err := iexec.WithOutput("git rev-parse --abbrev-ref HEAD", func(output string) error {
+		result = output
+		return nil
+	})
 	if err != nil {
 		return "", fmt.Errorf("failed to get current branch: %w", err)
 	}
-	return strings.TrimSpace(string(out)), nil
+	return result, nil
 }
 
 func GetPurgeableBranches(defaultBranch string) ([]Branch, []string) {
@@ -66,7 +75,6 @@ func GetPurgeableBranches(defaultBranch string) ([]Branch, []string) {
 	var purgeable []Branch
 
 	for _, name := range append(merged, squashed...) {
-		// Skip default branch and current branch
 		if name == defaultBranch || name == currentBranch {
 			continue
 		}
@@ -80,32 +88,38 @@ func GetPurgeableBranches(defaultBranch string) ([]Branch, []string) {
 }
 
 func getMergedBranches(defaultBranch string) ([]string, error) {
-	cmd := exec.Command("git", "branch", "--merged", defaultBranch, "--format=%(refname:short)")
-	out, err := cmd.Output()
+	var branches []string
+	err := iexec.WithOutput("git branch --merged "+defaultBranch+" --format=%(refname:short)", func(output string) error {
+		for _, line := range strings.Split(output, "\n") {
+			if line != "" {
+				branches = append(branches, line)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to get merged branches: %w", err)
-	}
-
-	var branches []string
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if line != "" {
-			branches = append(branches, line)
-		}
 	}
 	return branches, nil
 }
 
 func getSquashedBranches(defaultBranch string) ([]string, error) {
-	// Get all local branches
-	cmd := exec.Command("git", "branch", "--format=%(refname:short)")
-	out, err := cmd.Output()
+	var allBranches []string
+	err := iexec.WithOutput("git branch --format=%(refname:short)", func(output string) error {
+		for _, line := range strings.Split(output, "\n") {
+			if line != "" {
+				allBranches = append(allBranches, line)
+			}
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list branches: %w", err)
 	}
 
 	var squashed []string
-	for _, branch := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if branch == "" || branch == defaultBranch {
+	for _, branch := range allBranches {
+		if branch == defaultBranch {
 			continue
 		}
 		if isSquashMerged(branch, defaultBranch) {
@@ -116,50 +130,53 @@ func getSquashedBranches(defaultBranch string) ([]string, error) {
 }
 
 func isSquashMerged(branch, defaultBranch string) bool {
-	// Get the merge-base between the branch and default
-	mergeBaseCmd := exec.Command("git", "merge-base", defaultBranch, branch)
-	mergeBase, err := mergeBaseCmd.Output()
-	if err != nil {
-		return false
-	}
-	mergeBaseStr := strings.TrimSpace(string(mergeBase))
-
-	// Get the tree of the branch
-	treeCmd := exec.Command("git", "rev-parse", branch+"^{tree}")
-	branchTree, err := treeCmd.Output()
-	if err != nil {
-		return false
-	}
-	branchTreeStr := strings.TrimSpace(string(branchTree))
-
-	// Create a temporary commit with the branch's tree on top of merge-base
-	commitCmd := exec.Command("git", "commit-tree", branchTreeStr, "-p", mergeBaseStr, "-m", "temp")
-	tempCommit, err := commitCmd.Output()
-	if err != nil {
-		return false
-	}
-	tempCommitStr := strings.TrimSpace(string(tempCommit))
-
-	// Check if this tree state is reachable from the default branch
-	// using git cherry - if all commits show "-", they're already in default
-	cherryCmd := exec.Command("git", "cherry", defaultBranch, tempCommitStr)
-	cherryOut, err := cherryCmd.Output()
+	var mergeBase string
+	err := iexec.WithOutput("git merge-base "+defaultBranch+" "+branch, func(output string) error {
+		mergeBase = output
+		return nil
+	})
 	if err != nil {
 		return false
 	}
 
-	// If output is empty or shows "-", the changes are in default branch
-	output := strings.TrimSpace(string(cherryOut))
-	if output == "" {
-		return true
+	var branchTree string
+	err = iexec.WithOutput("git rev-parse "+branch+"^{tree}", func(output string) error {
+		branchTree = output
+		return nil
+	})
+	if err != nil {
+		return false
 	}
 
-	for _, line := range strings.Split(output, "\n") {
-		if strings.HasPrefix(line, "+") {
-			return false
+	var tempCommit string
+	err = iexec.WithOutput("git commit-tree "+branchTree+" -p "+mergeBase+" -m temp", func(output string) error {
+		tempCommit = output
+		return nil
+	})
+	if err != nil {
+		return false
+	}
+
+	var isSquashed bool
+	err = iexec.WithOutput("git cherry "+defaultBranch+" "+tempCommit, func(output string) error {
+		if output == "" {
+			isSquashed = true
+			return nil
 		}
+		for _, line := range strings.Split(output, "\n") {
+			if strings.HasPrefix(line, "+") {
+				isSquashed = false
+				return nil
+			}
+		}
+		isSquashed = true
+		return nil
+	})
+	if err != nil {
+		return false
 	}
-	return true
+
+	return isSquashed
 }
 
 func DeleteBranches(branches []string) error {
