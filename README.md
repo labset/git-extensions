@@ -14,26 +14,21 @@ git purge
 
 Lists branches that are safe to delete and lets you select which ones to remove.
 
-### git-recent
+### git-recent (coming soon)
 
 Quickly switch between recently used branches.
 
-```bash
-git recent
-```
-
-Shows your recent branches and lets you select one to checkout.
-
 ## Installation
-
-### From source
 
 Requires Go 1.25+
 
 ```bash
-go install github.com/labset/git-extensions/cmd/git-purge@latest
-go install github.com/labset/git-extensions/cmd/git-recent@latest
+git clone https://github.com/labset/git-extensions.git
+cd git-extensions
+make install
 ```
+
+This installs all extensions to your `$GOPATH/bin`.
 
 ## Usage
 
@@ -41,7 +36,13 @@ Once installed, the commands are available as git subcommands:
 
 ```bash
 git purge   # Clean up merged/squashed branches
-git recent  # Switch to a recent branch
+```
+
+## Development
+
+```bash
+make build   # Build all commands to bin/
+make clean   # Remove built binaries
 ```
 
 ## License
