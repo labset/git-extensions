@@ -1,0 +1,24 @@
+{
+  "name": "@labset/git-extensions",
+  "version": "1.0.0",
+  "keywords": [
+    "git",
+    "extensions"
+  ],
+  "homepage": "https://github.com/labset/git-extensions#readme",
+  "bugs": {
+    "url": "https://github.com/labset/git-extensions/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/labset/git-extensions.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Hasnae R.",
+  "scripts": {
+    "claude": "claude"
+  },
+  "devDependencies": {
+    "@anthropic-ai/claude-code": "^2.1.12"
+  }
+}
