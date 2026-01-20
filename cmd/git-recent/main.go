@@ -13,7 +13,7 @@ func main() {
 	rootCmd := &cobra.Command{
 		Use:   "git-recent",
 		Short: "Switch to a recently used branch",
-		Long:  "Interactively select and switch to a branch, sorted by most recent commit date.",
+		Long:  "Interactively select and switch to a branch, sorted by most recent commit date. Displays the commit date for each branch.",
 		RunE:  run,
 	}
 
@@ -35,7 +35,8 @@ func run(cmd *cobra.Command, args []string) error {
 
 	options := make([]huh.Option[string], len(branches))
 	for i, branch := range branches {
-		options[i] = huh.NewOption(branch.Name, branch.Name)
+		label := fmt.Sprintf("%s  %s", branch.Date, branch.Name)
+		options[i] = huh.NewOption(label, branch.Name)
 	}
 
 	var selected string
