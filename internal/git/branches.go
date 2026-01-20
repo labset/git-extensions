@@ -11,6 +11,7 @@ import (
 
 type Branch struct {
 	Name string
+	Date string
 }
 
 func GetDefaultBranch() (string, error) {
@@ -194,4 +195,31 @@ func DeleteBranches(branches []string) error {
 		return fmt.Errorf("failed to delete branches: %s", stderr.String())
 	}
 	return nil
+}
+
+func GetRecentBranches() ([]Branch, error) {
+	var branches []Branch
+	err := iexec.WithOutput("git for-each-ref refs/heads/ --sort=-committerdate --format=%(committerdate:short)|%(refname:short)", func(output string) error {
+		for _, line := range strings.Split(output, "\n") {
+			if line == "" {
+				continue
+			}
+			parts := strings.SplitN(line, "|", 2)
+			if len(parts) == 2 {
+				branches = append(branches, Branch{Date: parts[0], Name: parts[1]})
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get recent branches: %w", err)
+	}
+
+	return branches, nil
+}
+
+func SwitchBranch(branch string) error {
+	return iexec.WithOutput(fmt.Sprintf("git checkout %s", branch), func(output string) error {
+		return nil
+	})
 }
